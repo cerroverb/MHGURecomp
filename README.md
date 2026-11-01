@@ -23,20 +23,25 @@ Status: fully playable, but there may be some bugs. I've played a dozen hunts wi
 - Optional: village quests are playable in multiplayer (press L/R at the quest counter), with appropriately re-scaled monster HP
 - Mod support. The vast majority of mods work by dropping them into the `mods` folder, including Forge mods. (see [Mods](#mods))
 - Cheat codes in the same format as Ryujinx and Atmosphère, in the `cheats` folder (see [Cheats](#cheats))
-- Ingame PC Settings menu overlay (F1 or `Plus`+`Minus` to open, will be replaced with a real settings menu in the future)
+- Ingame PC Settings menu overlay (F1 or `Plus`+`Minus` to open)
 - Working online multiplayer servers, in public or with friends (use "Local Wireless" menu)
-- Discord Rich Presence: your Discord profile shows where you are, the quest's monsters and your party (can be turned off)
+- Discord Rich Presence (optional)
 
 ## Requirements
 
-- OS: Windows 10/11 64-bit, or Linux 64-bit with glibc 2.39 or newer (Ubuntu 24.04, Linux Mint 22, Debian 13,
-  SteamOS 3.7, Arch, Fedora 40 or newer) and a Vulkan driver
+- OS: Windows 10/11 64-bit, or Linux 64-bit with glibc 2.39 or newer. The following Linux distros are known to work (Vulkan support required):
+    - Ubuntu 24.04
+    - Linux Mint 22
+    - Debian 13
+    - SteamOS 3.7
+    - Arch
+    - Fedora 40
 - CPU: Any CPU from 2014 or newer (needs AVX2 support)
     - 64-bit ARM on Linux is experimental (see Building from source, Linux, 64-bit ARM)
 - GPU: Any GPU from 2016 or newer (needs Vulkan 1.2 support), and at least 1GB of VRAM
 - RAM: 4GB
 - Android (experimental, see [Android](#android)): a 64-bit ARM phone or tablet with Android 10 or newer, a GPU
-  with Vulkan 1.2, and a controller
+  with Vulkan 1.2, and a controller or virtual controller overlay app
 - The game files for Monster Hunter Generations Ultimate, version 1.4.0. You can extract these from your Switch or Ryujinx with patches pre-applied.
     - (Title ID `0100770008DD8000`, the `main` executable's build ID starts with `FB08F1D20FD1204F`)
 
@@ -160,6 +165,9 @@ To bring a save over, put its `system` and `system_backup` files in `save/save_0
 contents of `%APPDATA%\MHGURecomp\save\save_0\` (Linux: `~/.local/share/MHGURecomp/save/save_0/`). From a Switch,
 use the same files you'd use on PC. Copy `save/save_0/` back to your PC now and then as a backup.
 
+Public internet hubs on Android are shared with other Android players only. To play with friends on PC, all enter the
+same matchmaking key (settings menu, Multiplayer).
+
 To update, install the newer APK over the old one: your game files, saves and settings stay. **Don't uninstall it
 first.** Uninstalling deletes the whole `files` folder, game files and saves included. Android may offer to keep the
 app's data; say yes if you mean to reinstall.
@@ -214,8 +222,7 @@ anti-aliasing, VSync, controls and volume apply when you save; the settings mark
 - `[Anti-aliasing]`: `MSAA` (Off / 2x / 4x / 8x), `FXAA` (On / Off), `FXAAMode` (Original / 3_11: FXAA 3.11 in
   place of GU's FXAA, sharper textures; default Original)
 - `[Upscaler]`: `FSR` (Off / On, default Off), `FSRQuality` (NativeAA / Quality / Balanced / Performance /
-  UltraPerformance), `Sharpness`, and `Upscaler` (FSR3, the default, or FSR4: needs an AMD RDNA 4 GPU and its driver, and an exe built with `make FSR4_DRIVER_PATCH=1`;
-  falls back to FSR 3.1). FSR replaces MSAA and FXAA while it is on. Details: `docs/FSR-PORT.md`, `docs/FSR4-PORT.md`
+  UltraPerformance), `Sharpness`. FSR replaces MSAA and FXAA while it is on. Details: `docs/FSR-PORT.md`
 - `[Graphics]`: `DrawDistance` (how far away people in the villages and the Hubs are still drawn: 1 = the game's,
   2 = twice as far, 0.5 = half, 0 = no limit; up to 10)
 - `[Performance]`: `FPS` (30 to 240), `VSync` (On / Off; above your monitor's refresh rate, turn VSync off), `ShaderPrewarm`
@@ -233,7 +240,9 @@ anti-aliasing, VSync, controls and volume apply when you save; the settings mark
 - `[Mouse]`: `MouseSensitivity` (1 = default, 0.1 to 10)
 - `[Multiplayer]`: `Port`, `Join` (addresses of hosts outside your LAN), `Server` (hub server for internet hubs:
   empty = the default, `Off` = none, or `host[:port]`), `Key` (matchmaking key: only players with the same key see
-  each other's hubs; empty = public), `SyncSmallMonsters`
+  each other's hubs; empty = public, on Android public among Android players only), `SyncSmallMonsters`,
+  `ShareUrgentCredit` (default On: an Urgent quest someone else posted counts for you too when you clear it, if you
+  have unlocked it yourself)
 - `[Monster HP]`: HP factors for 1 to 4 hunters in Hub quests, and per-quest exceptions (default: all 1, the
   original game)
 - `[Village Quests]`: `VillageQuestsInHub` (default On), `HubHP` (default 2.0: Village quests posted in the Hub

@@ -265,7 +265,6 @@ bool equal(const Config &a, const Config &b) {
     SAME(render_h);
     SAME(fps);
     SAME(fsr);
-    SAME(fsr_upscaler);
     SAME(fsr_quality);
     SAME(fsr_sharpness);
     SAME(fsr_objmotion);
@@ -283,6 +282,7 @@ bool equal(const Config &a, const Config &b) {
     SAME(sync_small_monsters);
     SAME(bonus_content);
     SAME(village_in_hub);
+    SAME(share_urgent);
     SAME(mouse_sensitivity);
     SAME(aspect_ratio);
     SAME(fov);
@@ -733,7 +733,6 @@ void reset_section() {
         break;
     case 1:
         c.fsr = f.fsr;
-        c.fsr_upscaler = f.fsr_upscaler;
         c.fsr_quality = f.fsr_quality;
         c.fsr_sharpness = f.fsr_sharpness;
         c.fsr_objmotion = f.fsr_objmotion;
@@ -768,6 +767,7 @@ void reset_section() {
     case 4:
         c.sync_small_monsters = f.sync_small_monsters;
         c.village_in_hub = f.village_in_hub;
+        c.share_urgent = f.share_urgent;
         c.hp = f.hp;
         quest_keys();
         break;
@@ -1109,14 +1109,6 @@ std::vector<Row> main_rows() {
         add_bool(r, "fsr", "FSR", &c.fsr, ini("FSR"));
         if (c.fsr) {
             add_choice(
-                r, "fsr.provider", "Upscaler", c.fsr_upscaler, {"FSR 3.1", "FSR 4"},
-                [](int v) { s.draft.fsr_upscaler = v; }, ini("Upscaler"));
-            if (g_fsr4_fallback && c.fsr_upscaler == FSR_UP_4 && g_config.fsr && g_config.fsr_upscaler == FSR_UP_4) {
-                r.back().value += std::string(" (") + tr("FSR 3.1 in use") + ")";  // (fsr4.c: FSR 4 didn't start)
-                r.back().warn = true;
-                r.back().help = tr(g_fsr4_fallback);
-            }
-            add_choice(
                 r, "fsr.quality", "FSR quality", c.fsr_quality,
                 {tr("Native AA"), tr("Quality"), tr("Balanced"), tr("Performance"), tr("Ultra performance")},
                 [](int v) { s.draft.fsr_quality = v; }, ini("FSRQuality"));
@@ -1143,7 +1135,11 @@ std::vector<Row> main_rows() {
              !*c.ldn_server ? std::string(tr("Default")) + (*LDN_DEFAULT_SERVER ? " (" LDN_DEFAULT_SERVER ")" : "")
                             : c.ldn_server,
              ini("Server"));
+#ifdef __ANDROID__
+        text(r, "key", "Matchmaking key", c.ldn_key, sizeof c.ldn_key, *c.ldn_key ? c.ldn_key : tr("Public (Android players only)"), ini("Key"));
+#else
         text(r, "key", "Matchmaking key", c.ldn_key, sizeof c.ldn_key, *c.ldn_key ? c.ldn_key : tr("Public"), ini("Key"));
+#endif
         hub_check(r);
         header(r, "discord.header", "Discord");
         add_bool(r, "discord", "Discord Rich Presence", &c.discord, ini("RichPresence"));
@@ -1155,6 +1151,7 @@ std::vector<Row> main_rows() {
         header(r, "hub.header", tr("Hub"));
         add_bool(r, "sync", "Sync small monsters", &c.sync_small_monsters, ini("SyncSmallMonsters"));
         add_bool(r, "village", "Village quests in Hub", &c.village_in_hub, ini("VillageQuestsInHub"));
+        add_bool(r, "urgent", "Urgent quests count for all", &c.share_urgent, ini("ShareUrgentCredit"));
         header(r, "hp.header", tr("Monster HP Scaling"));
         for (int i = 0; i < 4; i++)
             number(r, "hp." + std::to_string(i), std::to_string(i + 1) + " " + tr(i == 0 ? "Hunter" : "Hunters"), &c.hp.scale[i],

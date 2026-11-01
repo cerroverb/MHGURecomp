@@ -260,7 +260,7 @@ int main() {
     tab();
     tab();
     selected("sync");  // (the Hub heading first)
-    down(2);
+    down(3);
     selected("hp.0");
     tab();
     selected("mod.Aaa");
@@ -519,7 +519,7 @@ int main() {
     press(ImGuiKey_GamepadL1);
     press(ImGuiKey_GamepadL1);  // (Cheats, Mods, Misc)
     selected("sync");  // (the Hub heading first)
-    down(2);
+    down(3);
     selected("hp.0");
     down(5);
     confirm();
@@ -561,16 +561,13 @@ int main() {
     confirm();
     assert(settings_panel_dirty());
     down();
-    selected("fsr.provider");
-    press(ImGuiKey_GamepadDpadRight);
-    down();
     selected("fsr.quality");
     press(ImGuiKey_GamepadDpadRight);
     press(ImGuiKey_End);
     press(ImGuiKey_GamepadDpadUp);
     selected("save");
     confirm();
-    assert(config_editable().fsr == 1 && config_editable().fsr_upscaler == FSR_UP_4);
+    assert(config_editable().fsr == 1);
     assert(config_editable().fsr_quality == FSR_QUALITY);
     Config fsr_saved = config_editable();
     assert(config_restart_required(&fsr_saved));

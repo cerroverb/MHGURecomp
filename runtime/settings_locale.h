@@ -188,6 +188,7 @@ static inline const char *settings_text(int language, const char *english) {
         {"Default", "Predeterminado"},
         {"Matchmaking key", "Clave de emparejamiento"},
         {"Public", "Pública"},
+        {"Public (Android players only)", "Pública (solo jugadores de Android)"},
         {"Check hub server", "Comprobar servidor de salas"},
         {"Asks the hub server above whether it answers, with the matchmaking key above: how long it takes, and how many hubs it lists.",
          "Pregunta al servidor de salas de arriba si responde, con la clave de emparejamiento de arriba: cuánto tarda y cuántas salas muestra."},
@@ -219,6 +220,7 @@ static inline const char *settings_text(int language, const char *english) {
         {"The host did not answer through the hub server.", "El anfitrión no respondió a través del servidor de salas."},
         {"Sync small monsters", "Sincronizar monstruos pequeños"},
         {"Village quests in Hub", "Misiones de aldea en sala"},
+        {"Urgent quests count for all", "Las misiones urgentes cuentan para todos"},
         {"Discord Rich Presence", "Presencia en Discord"},
         {"Show hunter name and HR", "Mostrar nombre y RC del cazador"},
         {"Hunter", "Cazador"},
@@ -288,7 +290,6 @@ static inline const char *settings_text(int language, const char *english) {
         {"Bottom button", "Botón inferior"},
         {"Right button", "Botón derecho"},
         {"Invalid menu confirmation policy.", "Configuración de confirmación no válida."},
-        {"Upscaler", "Escalador"},
         {"FSR quality", "Calidad de FSR"},
         {"Native AA", "Antialiasing nativo"},
         {"Quality", "Calidad"},
@@ -300,12 +301,8 @@ static inline const char *settings_text(int language, const char *english) {
         {"Reactive mask", "Máscara reactiva"},
         {"Animated surfaces", "Superficies animadas"},
         {"FSR overrides MSAA and FXAA while active.", "FSR sustituye MSAA y FXAA mientras está activo."},
-        {"Invalid FSR quality, provider, sharpness or reactive mask.", "Calidad, escalador, nitidez o máscara reactiva de FSR no válidos."},
+        {"Invalid FSR quality, sharpness or reactive mask.", "Calidad, nitidez o máscara reactiva de FSR no válidas."},
         {"Off (FSR)", "No (FSR)"},
-        {"FSR 3.1 in use", "FSR 3.1 en uso"},
-        {"This GPU can't run FSR 4, so FSR 3.1 is used.", "Esta GPU no puede usar FSR 4, así que se usa FSR 3.1."},
-        {"FSR 4 could not start, so FSR 3.1 is used. The [fsr4] lines in log.txt say why.",
-         "FSR 4 no pudo iniciarse, así que se usa FSR 3.1. Las líneas [fsr4] de log.txt dicen por qué."},
     };
     for (unsigned i = 0; i < sizeof messages / sizeof *messages; ++i)
         if (!strcmp(english, messages[i].en)) return messages[i].es;
