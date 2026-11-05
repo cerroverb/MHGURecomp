@@ -66,8 +66,13 @@ No settings operation saves game progress. Reset this section changes only the
 draft and requires a subsequent Save. A write failure preserves draft and file.
 
 Save applies volume, FPS, FOV, FXAA, MSAA, VSync, mouse sensitivity, face mapping,
-background input and confirmation policy without restarting. Render changes
-are consumed at render boundaries. Language, symbols and interface scale preview
+background input and confirmation policy without restarting.
+So do Monster HP's factors and quest overrides and the Village Quests settings (the next large monster's HP, the
+counter's rank or star menu).
+Multiplayer's Port and Join (from the next hub hosted or searched for) and SyncSmallMonsters apply at Save too.
+BonusContent counts from the next time the game opens the save, and the cheats folder is read again each time the
+menu opens.
+Render changes are consumed at render boundaries. Language, symbols and interface scale preview
 immediately and persist on Save. Cold fields carry an asterisk; the saved status
 indicates a pending restart only when cold settings differ from startup values.
 Raw Auto/Desktop values and unchanged environment overrides are preserved.
@@ -123,12 +128,12 @@ cover the game itself.
 
 ## FSR settings
 
- Graphics & Audio exposes all seven
-[Upscaler] fields: FSR, provider (FSR 3.1 / FSR 4), quality, sharpness, object
-motion, reactive mask and animated surfaces. They persist without removing INI
-comments/aliases, participate in draft equality, dirty guards and section reset,
-and are marked restart-only. FSR 4 retains upstream's provider/fallback rules;
-selecting it does not install a driver or loader.
+ Graphics & Audio exposes all six
+[Upscaler] fields: FSR, quality, sharpness, object motion, reactive mask and
+animated surfaces. They persist without removing INI comments/aliases,
+participate in draft equality, dirty guards and section reset.
+Sharpness and reactive mask apply at Save (each FSR frame reads them, fsr.c run_fsr); the others are marked
+restart-only.
 
 Active FSR keeps live MSAA at 1 and FXAA off, including after saving other
 settings or staging FSR Off for the next boot. The editor shows the AA rows as disabled "Off (FSR)" while FSR owns them,

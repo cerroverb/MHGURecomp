@@ -142,7 +142,11 @@ const Theme &theme() {
 }
 ImVec4 vec(ImU32 c) { return ImGui::ColorConvertU32ToFloat4(c); }
 // The Mods tab: the mods folder's state (modorder.h), which is saved with the rest of the settings
+#ifdef __ANDROID__
+constexpr int PAGES = 9, MODS_PAGE = 5, CHEATS_PAGE = 6, APP_PAGE = 7, ANDROID_PAGE = 8;  // (Android: the tab for its own settings)
+#else
 constexpr int PAGES = 8, MODS_PAGE = 5, CHEATS_PAGE = 6, APP_PAGE = 7;
+#endif
 struct ScanResult {
     std::vector<std::string> names;  // (the order ModConflict's indexes are in)
     ModScan scan = {};
@@ -265,7 +269,6 @@ bool equal(const Config &a, const Config &b) {
     SAME(render_h);
     SAME(fps);
     SAME(fsr);
-    SAME(fsr_upscaler);
     SAME(fsr_quality);
     SAME(fsr_sharpness);
     SAME(fsr_objmotion);
@@ -283,6 +286,7 @@ bool equal(const Config &a, const Config &b) {
     SAME(sync_small_monsters);
     SAME(bonus_content);
     SAME(village_in_hub);
+    SAME(share_urgent);
     SAME(mouse_sensitivity);
     SAME(aspect_ratio);
     SAME(fov);
@@ -300,6 +304,8 @@ bool equal(const Config &a, const Config &b) {
     SAME(menu_confirm);
     SAME(confirm_exit);
     SAME(show_fps);
+    SAME(menu_chord);
+    SAME(show_battery);
     SAME(updates);
     SAME(hp.village);
     SAME(hp.quests);
@@ -307,7 +313,7 @@ bool equal(const Config &a, const Config &b) {
     if (memcmp(a.binds, b.binds, sizeof a.binds))
         return false;
     if (strcmp(a.ldn_join, b.ldn_join) || strcmp(a.ldn_server, b.ldn_server) || strcmp(a.ldn_key, b.ldn_key) ||
-        strcmp(a.chat_key, b.chat_key))
+        strcmp(a.chat_key, b.chat_key) || strcmp(a.save_dir, b.save_dir) || strcmp(a.save_location, b.save_location) || strcmp(a.game_dir, b.game_dir))
         return false;
     for (int n = 0; n < 4; ++n)
         if (a.hp.scale[n] != b.hp.scale[n])
@@ -733,13 +739,13 @@ void reset_section() {
         break;
     case 1:
         c.fsr = f.fsr;
-        c.fsr_upscaler = f.fsr_upscaler;
         c.fsr_quality = f.fsr_quality;
         c.fsr_sharpness = f.fsr_sharpness;
         c.fsr_objmotion = f.fsr_objmotion;
         c.fsr_reactive = f.fsr_reactive;
         c.fsr_animsurf = f.fsr_animsurf;
         c.show_fps = f.show_fps;
+        c.show_battery = f.show_battery;
         c.fps = f.fps;
         c.vsync = f.vsync;
         c.shader_prewarm = f.shader_prewarm;
@@ -754,6 +760,7 @@ void reset_section() {
     case 2:
         c.face_buttons = f.face_buttons;
         c.background_input = f.background_input;
+        c.menu_chord = f.menu_chord;
         c.combo_window = f.combo_window;
         c.mouse_sensitivity = f.mouse_sensitivity;
         SDL_strlcpy(c.chat_key, f.chat_key, sizeof c.chat_key);
@@ -768,6 +775,7 @@ void reset_section() {
     case 4:
         c.sync_small_monsters = f.sync_small_monsters;
         c.village_in_hub = f.village_in_hub;
+        c.share_urgent = f.share_urgent;
         c.hp = f.hp;
         quest_keys();
         break;
@@ -781,11 +789,18 @@ void reset_section() {
         for (int i = 0; i < (int)cheat_tab.draft.size(); ++i)
             cheat_tab.draft[i] = 1;
         break;
+#ifdef __ANDROID__
+    case ANDROID_PAGE:
+        SDL_strlcpy(c.save_dir, f.save_dir, sizeof c.save_dir);
+        SDL_strlcpy(c.game_dir, f.game_dir, sizeof c.game_dir);
+        break;
+#endif
     case APP_PAGE:
         c.language = f.language;
         c.menu_theme = f.menu_theme;
         c.menu_scale = f.menu_scale;
         c.menu_confirm = f.menu_confirm;
+        SDL_strlcpy(c.save_location, f.save_location, sizeof c.save_location);
         c.button_icons = f.button_icons;
         c.confirm_exit = f.confirm_exit;
         c.updates = f.updates;
@@ -1051,6 +1066,11 @@ std::vector<Row> main_rows() {
         add_bool(r, "mutebg", "Mute in background", &c.mute_in_background, ini("MuteInBackground"));
         header(r, "graphics.header", tr("Graphics"));
         add_bool(r, "show.fps", "FPS counter", &c.show_fps, ini("ShowFPS"));
+#ifdef __ANDROID__
+        add_choice(r, "show.battery", "Battery indicator", c.show_battery, {tr("Off"), tr("With FPS counter"), tr("By itself")},
+                   [](int v) { c.show_battery = v; }, ini("ShowBattery"));
+        r.back().help = tr("The battery's charge, in the FPS counter's box or in a box of its own (drag it like the FPS counter).");
+#endif
         number(r, "fps", "Frame rate limit", &c.fps, (int)lo("FPS"), (int)hi("FPS"), 1, ini("FPS"));
         {  // left / right: one frame per second more or less; Confirm: the common ones
             static const int presets[] = {30, 60, 90, 120, 150, 240};
@@ -1109,14 +1129,6 @@ std::vector<Row> main_rows() {
         add_bool(r, "fsr", "FSR", &c.fsr, ini("FSR"));
         if (c.fsr) {
             add_choice(
-                r, "fsr.provider", "Upscaler", c.fsr_upscaler, {"FSR 3.1", "FSR 4"},
-                [](int v) { s.draft.fsr_upscaler = v; }, ini("Upscaler"));
-            if (g_fsr4_fallback && c.fsr_upscaler == FSR_UP_4 && g_config.fsr && g_config.fsr_upscaler == FSR_UP_4) {
-                r.back().value += std::string(" (") + tr("FSR 3.1 in use") + ")";  // (fsr4.c: FSR 4 didn't start)
-                r.back().warn = true;
-                r.back().help = tr(g_fsr4_fallback);
-            }
-            add_choice(
                 r, "fsr.quality", "FSR quality", c.fsr_quality,
                 {tr("Native AA"), tr("Quality"), tr("Balanced"), tr("Performance"), tr("Ultra performance")},
                 [](int v) { s.draft.fsr_quality = v; }, ini("FSRQuality"));
@@ -1135,6 +1147,8 @@ std::vector<Row> main_rows() {
         number(r, "mouse", tr("Mouse sensitivity"), &c.mouse_sensitivity, lo("MouseSensitivity"), hi("MouseSensitivity"), .05f, ini("MouseSensitivity"));
         action(r, "keybinds", tr("Keybinds"), []() { push(View::Keybinds, "bind.0"); });
         r.back().help = tr("The keys and mouse buttons for the Switch controller's buttons, for moving and for the item bar, and the chat key.");
+        add_bool(r, "menu.chord", "Plus + Minus opens this menu", &c.menu_chord, ini("MenuChord"));
+        r.back().help = tr("Pressing Plus and Minus together (Start + Back on a controller) opens this menu. Turn it off to keep that combination for the game or a cheat, for example when you play with a keyboard and mouse. F1 still opens the menu.");
         break;
     case 3:
         number(r, "port", "Host port (TCP / UDP)", &c.ldn_port, (int)lo("Port"), (int)hi("Port"), 1, ini("Port"));
@@ -1143,7 +1157,11 @@ std::vector<Row> main_rows() {
              !*c.ldn_server ? std::string(tr("Default")) + (*LDN_DEFAULT_SERVER ? " (" LDN_DEFAULT_SERVER ")" : "")
                             : c.ldn_server,
              ini("Server"));
+#ifdef __ANDROID__
+        text(r, "key", "Matchmaking key", c.ldn_key, sizeof c.ldn_key, *c.ldn_key ? c.ldn_key : tr("Public (Android players only)"), ini("Key"));
+#else
         text(r, "key", "Matchmaking key", c.ldn_key, sizeof c.ldn_key, *c.ldn_key ? c.ldn_key : tr("Public"), ini("Key"));
+#endif
         hub_check(r);
         header(r, "discord.header", "Discord");
         add_bool(r, "discord", "Discord Rich Presence", &c.discord, ini("RichPresence"));
@@ -1155,6 +1173,7 @@ std::vector<Row> main_rows() {
         header(r, "hub.header", tr("Hub"));
         add_bool(r, "sync", "Sync small monsters", &c.sync_small_monsters, ini("SyncSmallMonsters"));
         add_bool(r, "village", "Village quests in Hub", &c.village_in_hub, ini("VillageQuestsInHub"));
+        add_bool(r, "urgent", "Urgent quests count for all", &c.share_urgent, ini("ShareUrgentCredit"));
         header(r, "hp.header", tr("Monster HP Scaling"));
         for (int i = 0; i < 4; i++)
             number(r, "hp." + std::to_string(i), std::to_string(i + 1) + " " + tr(i == 0 ? "Hunter" : "Hunters"), &c.hp.scale[i],
@@ -1258,11 +1277,52 @@ std::vector<Row> main_rows() {
         add_choice(r, "updates", "Updates", c.updates, {tr("Ask"), tr("Auto"), tr("Off")},
                    [](int v) { c.updates = v; }, ini("Updates"));
         add_bool(r, "bonus", "Bonus content", &c.bonus_content, ini("BonusContent"));
+#ifndef __ANDROID__  // (Android: its own tab's Save folder)
+        header(r, "save.header", tr("Save data"));
+        text(r, "save.location", "Save folder", c.save_location, sizeof c.save_location,
+             *c.save_location ? c.save_location : tr("Default folder"), ini("SaveLocation"));
+        r.back().help = tr("Where the save is kept (the folder that holds save_0), for example on another drive or in a folder you sync. Type a path, or use Choose folder. Press Save, then restart the game. Your current save is not moved: copy the save_0 folder there first.");
+        action(r, "save.location.pick", tr("Choose folder"), []() { ui_request_import(4); });
+        r.back().help = tr("Opens your system's folder picker to choose the save folder.");
+        action(r, "save.location.reset", tr("Use the default folder"), []() { s.draft.save_location[0] = 0; },
+               *c.save_location != 0);
+        r.back().help = tr("Keeps the save in the default folder again (%APPDATA%\\MHGURecomp\\save on Windows, ~/.local/share/MHGURecomp/save on Linux) after Save and a restart. The save in the other folder is left where it is.");
+#endif
         break;
+#ifdef __ANDROID__
+    case ANDROID_PAGE:  // (Android/data can't be written by the player's file managers: the app copies files in and out)
+        header(r, "save.header", tr("Save data"));
+        text(r, "save.folder", "Save folder", c.save_dir, sizeof c.save_dir, *c.save_dir ? c.save_dir : tr("App folder (default)"),
+             ini("SaveFolder"));
+        r.back().activate = []() { ui_request_import(4); };
+        r.back().help = tr("Where the save is kept, so syncing software can keep it the same on your devices: pick the same folder on each. The folder holds save_0, like the PC version's save folder. Android asks for \"All files access\" so the app can use a folder outside its own. Press Save, then restart the app. Your current save is not moved: use Export save first to put it there.");
+        action(r, "save.folder.reset", tr("Use the app's folder"), []() { s.draft.save_dir[0] = 0; }, *c.save_dir != 0);
+        r.back().help = tr("Keeps the save in the app's own folder again (after Save and a restart). The save in the other folder is left where it is.");
+        action(r, "import.save", tr("Import save"), []() { ui_request_import(2); });
+        r.back().help = tr("Copies a save's system and system_backup files into the app from any folder on this device. Your current save is kept. The app closes afterwards.");
+        action(r, "export.save", tr("Export save"), []() { ui_request_import(3); });
+        r.back().help = tr("Copies the save's system and system_backup files out to any folder on this device, as a backup or to move it to another device.");
+        header(r, "game.header", tr("Game files and mods"));
+        text(r, "game.folder", "Game files folder", c.game_dir, sizeof c.game_dir, *c.game_dir ? c.game_dir : tr("App folder (default)"),
+             ini("GameFolder"));
+        r.back().activate = []() { ui_request_import(7); };
+        r.back().help = tr("Uses the game files where they are, for example on a USB drive or SD card, so they don't have to fit in the app's own folder. Pick the folder that holds exefs and romfs. Android asks for \"All files access\" so the app can read it. Press Save, then restart the app. Nothing is copied; the drive has to stay connected while you play.");
+        action(r, "game.folder.reset", tr("Use the app's folder"), []() { s.draft.game_dir[0] = 0; }, *c.game_dir != 0);
+        r.back().help = tr("Uses the game files in the app's own folder again (after Save and a restart). The files in the other folder are left where they are.");
+        action(r, "import.mod.zip", tr("Import mod (zip)"), []() { ui_request_import(5); });
+        r.back().help = tr("Adds a mod from a .zip file anywhere on this device. The app checks the zip's layout and offers to fix it if the game couldn't find the mod's files. Close and reopen the app to load it.");
+        action(r, "import.mod.folder", tr("Import mod (folder)"), []() { ui_request_import(6); });
+        r.back().help = tr("Adds a mod from a folder anywhere on this device. The app checks the folder's layout and offers to fix it if the game couldn't find the mod's files. Close and reopen the app to load it.");
+        action(r, "import.game", tr("Import game files"), []() { ui_request_import(1); });
+        r.back().help = tr("Copies the exefs and romfs folders into the app from any folder on this device, replacing the game files it has, and uses them from now on. The app closes afterwards.");
+        break;
+#endif
     }
     spacer(r, "actions.gap");  // (Save and Reset this tab, and on Menu Options Restart and Exit game, apart)
     if (s.page == APP_PAGE) {
+#ifndef __ANDROID__  // (Android can't start the app again from itself: close it and open it again)
         action(r, "restart", tr("Restart"), []() { push(View::Restart, "dialog.cancel"); });
+#endif
         action(r, "exit", tr("Exit game"), []() { push(View::Exit, "dialog.cancel"); });
     }
     action(r, "save", tr("Save"), []() { s.command = Command::Save; }, dirty());
@@ -1845,6 +1905,7 @@ void settings_panel(bool *open) {
         s.help_row.clear();
         quest_keys();
         load_mods();
+        cheats_rescan();  // (files added, edited or removed since the last time count from now)
         load_cheats();
     }
     if (request_exit.exchange(false) && s.view != View::Exit)
@@ -1934,7 +1995,11 @@ void settings_panel(bool *open) {
             first_page((s.page + 1) % PAGES);
         if (pressed(ImGuiKey_GamepadL1))
             first_page((s.page + PAGES - 1) % PAGES);
-        const char *pages[] = {"Display", "Graphics & Audio", "Controls", "Network", "Misc", "Mods", "Cheats", "Menu Options"};
+        const char *pages[] = {"Display", "Graphics & Audio", "Controls", "Network", "Misc", "Mods", "Cheats", "Menu Options"
+#ifdef __ANDROID__
+                               , "Android"
+#endif
+        };
         float avail = ImGui::GetContentRegionAvail().x;
         float fw = ImGui::GetFontSize();
         ImVec2 scrolling_start = ImGui::GetCursorScreenPos();
@@ -2111,6 +2176,19 @@ void settings_panel(bool *open) {
     }
     if (!equal(before, s.draft) && dirty())
         s.saved_notice = false;
+    {  // (the folder Save folder's or Game files folder's picker chose: the picker ran on the window's thread)
+        char folder[sizeof s.draft.save_dir];
+        int which = ui_take_picked_folder(folder, sizeof folder);
+#ifdef __ANDROID__
+        if (which == 4) SDL_strlcpy(s.draft.save_dir, folder, sizeof s.draft.save_dir);
+        if (which == 7) SDL_strlcpy(s.draft.game_dir, folder, sizeof s.draft.game_dir);
+#else
+        Config temp = s.draft;  // (a folder whose path the settings file can't hold, with ';' or '#', is not taken)
+        if (which == 4 && SDL_strlcpy(temp.save_location, folder, sizeof temp.save_location) < sizeof temp.save_location &&
+            config_validate(&temp, nullptr, 0))
+            s.draft = temp;
+#endif
+    }
     if (ui_action_failed())
         s.error = tr("Restart failed. The game is still running.");
     if (!s.error.empty()) {
@@ -2128,7 +2206,7 @@ void settings_panel(bool *open) {
             ImGui::PushStyleColor(ImGuiCol_Text, vec(theme().warn));
             ImGui::TextWrapped("%s", tr("Online: only use cheats when everyone in the lobby agrees to it."));
             ImGui::PopStyleColor();
-            ImGui::TextWrapped("%s", tr("Cheats turn on and off when you press Save, no restart needed. Turning one off undoes its changes to the game's code; values it already changed (money, items) stay. Cheats added with Add a cheat work right away; new cheat files in the folder show up after a restart."));
+            ImGui::TextWrapped("%s", tr("Cheats turn on and off when you press Save, no restart needed. Turning one off undoes its changes to the game's code; values it already changed (money, items) stay. Cheats added with Add a cheat work right away; cheat files added or edited in the folder show up the next time this menu opens."));
         }
         if (std::any_of(rows.begin(), rows.end(), [](const Row &r) { return r.cold; }))  // (the rows with " *")
             ImGui::TextUnformatted(tr("* Restart required"));
