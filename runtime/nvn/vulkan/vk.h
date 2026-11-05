@@ -1,4 +1,4 @@
-// Vulkan 1.2 backend for the NVN layer. Baseline: what an AMD GCN card with a 2020 driver offers (see
+// Vulkan 1.2 backend for the NVN layer (with a path for Vulkan 1.1 devices: g_vk.api11). Baseline: what an AMD GCN card with a 2020 driver offers (see
 // docs/STATUS.md): no dynamic rendering, no synchronization2, no extended dynamic state, no push descriptors.
 // Files: device.c (instance, device, swapchain, presentation), textures.c (images, change-detected uploads from
 // guest memory, views, samplers), shaders.c (GLSL -> SPIR-V, reflection, built-in shaders), exec.c (command lists:
@@ -8,7 +8,8 @@
 // passes, copies and dispatches. Render passes are VkRenderPass objects (cached by attachment formats; LOAD / STORE,
 // GENERAL in and out) with framebuffers cached by their views. Pipelines bake all state but viewport, scissor, depth
 // bias, blend constants and stencil masks / reference. Submissions are numbered; a timeline semaphore signals each
-// number, which is what NVN fences (renderer_fence_seq / renderer_wait_seq) wait for.
+// number, which is what NVN fences (renderer_fence_seq / renderer_wait_seq) wait for. Without timeline semaphores a
+// fence per submission keeps the same numbers (g_vk.fences, exec.c).
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
@@ -35,8 +36,23 @@ typedef struct {
     VkPhysicalDeviceProperties props;
     VkPipelineCache pcache;
     VkSemaphore timeline;      // value = last completed submission number
+    // (from the driver: Android 10 and 11's libvulkan.so has no Vulkan 1.2 functions, whatever the driver supports, and
+    // importing one stops the game from starting)
+    PFN_vkGetSemaphoreCounterValue get_semaphore_counter;
+    PFN_vkWaitSemaphores wait_semaphores;
+    bool api11;                // a device below Vulkan 1.2 (or MHGU_VK11=1): no 1.2 structures, SPIR-V 1.3, no FSR
+    bool fences;               // no timeline semaphores (always with api11): exec.c numbers submissions with fences
+    bool no_mirror_clamp;      // api11 without VK_KHR_sampler_mirror_clamp_to_edge: textures.c mirrors and repeats
     VkCommandPool pool;        // render thread only
     bool divisor, demote, custom_border, depth_clamp, stencil_export, sample_shading;
+    // VK_EXT_depth_bias_control (exec.c): a DEPTH24_STENCIL8 the GPU makes as D32_SFLOAT_S8_UINT (AMD) gets the game's
+    // polygon offsets in D24 steps, as on the Switch; without it the float format's steps can be smaller and decals flicker
+    // (a Vulkan header older than 1.3.268 has no such extension: never set then)
+#ifdef VK_EXT_depth_bias_control
+    PFN_vkCmdSetDepthBias2EXT set_depth_bias2;
+#else
+    void *set_depth_bias2;
+#endif
     bool bc;                   // textureCompressionBC (MHGU_NO_BC=1: off, as phone GPUs report; textures.c decodes BC)
     volatile uint32_t msaa;    // samples for the 3D scene's passes (settings MSAA, as far as the GPU allows): 1 = off
     uint32_t msaa_counts;      // the sample counts MSAA can use (bits 2, 4, 8)
