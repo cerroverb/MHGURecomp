@@ -121,7 +121,7 @@ OSFLAGS  := -D_FILE_OFFSET_BITS=64 -DWIN32_LEAN_AND_MEAN -DNOMINMAX -D_CRT_RAND_
 GENFLAGS += -D_FILE_OFFSET_BITS=64
 # (the GCC runtime - libstdc++, libgcc, winpthreads - linked in: three DLLs fewer to ship, and their licenses ask no
 # more than their notices then; build/licenses has those)
-LDFLAGS  := -fuse-ld=lld -Wl,--stack,16777216 $(SDL_LIBS) $(AV_LIBS) -lvulkan-1 $(SHADERC_LIBS) -lwinmm -lversion -lole32 -lshell32 -luuid -lws2_32 \
+LDFLAGS  := -fuse-ld=lld -Wl,--stack,268435456 $(SDL_LIBS) $(AV_LIBS) -lvulkan-1 $(SHADERC_LIBS) -lwinmm -lversion -lole32 -lshell32 -luuid -lws2_32 \
             -lbcrypt -static-libgcc -static-libstdc++ -Wl,-Bstatic -lwinpthread -Wl,-Bdynamic \
             -Wl,--export-all-symbols -Wl,--out-implib,$(O)/mhgurecomp.dll.a
 GAMELIB  := $(B)/mhgugame.dll
@@ -129,6 +129,11 @@ GAMELIB_LDFLAGS := -shared -fuse-ld=lld -static-libgcc $(O)/mhgurecomp.dll.a
 UPDATER  := $(B)/mhgurecomp-updater.exe
 # (a window program; zlib linked in, WinHTTP is Windows')
 UPD_LDFLAGS := -fuse-ld=lld -mwindows $(SDL_LIBS) -lwinhttp -Wl,-Bstatic -lz -Wl,-Bdynamic -static-libgcc
+# the executables' icons (extras/icon/mhgurecomp.rc, mhgurecomp-updater.rc); llvm-windres comes with MSYS2's llvm-tools,
+# which not every setup has: binutils' windres makes them too
+WINDRES  ?= $(if $(shell command -v llvm-windres 2>/dev/null),llvm-windres,windres)
+ICON_RES := $(O)/icon.res.o
+UPD_ICON_RES := $(O)/updater-icon.res.o
 else ifeq ($(PLATFORM),android)
 include android/android.mk
 else
@@ -175,7 +180,7 @@ SHADER_ID := $(shell cat $(SHADER_SRCS) | tr -d '\r' | sha256sum | cut -c1-16)
 VERSION ?= $(shell git describe --tags 2>/dev/null || echo unknown)
 
 RT_OBJ   = $(patsubst runtime/%.c,$(O)/rt/%.o,$(RT_SRC)) $(RT_CXX) $(O)/rt/overlay.o $(O)/rt/settings_panel.o $(IMGUI_OBJ) \
-           $(O)/updater/sha256.o
+           $(O)/updater/sha256.o $(ICON_RES)
 # (updater/sha256.c: runtime/net/ldn.c hashes the matchmaking key with it)
 # Dear ImGui with cimgui's C API (third_party/cimgui: Forge plugins' ImGui, runtime/forge_imgui.c, overlay.cpp)
 IMGUI    := third_party/cimgui
@@ -208,17 +213,8 @@ FFX_GPU  := $(FFX)/include/FidelityFX/gpu
 FFX_PASS := $(FFX)/src/backends/vk/shaders/fsr3upscaler
 $(O)/fsr/src/ffx_fsr3_glsl.c.o: FSRFLAGS += -DFFX_GPU_DIR='"$(FFX_GPU)"' -DFFX_PASS_DIR='"$(FFX_PASS)"'
 $(O)/fsr/src/ffx_fsr3_glsl.c.o: $(wildcard $(FFX_GPU)/*.h $(FFX_GPU)/*/*.h $(FFX_PASS)/*.glsl)
-RTFLAGS  += -I$(FSR)/include -Ithird_party/ffx-api
-# FSR4_DRIVER_PATCH=1 (opt-in): FSR 4 can use the AMD driver's own amdvkffx64.dll directly, which needs one in-memory patch of
-# that DLL's GetModuleHandleW import (runtime/nvn/vulkan/fsr4.c, docs/FSR4-PORT.md). The default, FSR4_DRIVER_PATCH=0, leaves
-# all of that code out: nothing of AMD's is touched, and FSR 4 is only used through a loader DLL the player supplies (else FSR 3.1).
-FSR4_DRIVER_PATCH ?= 0
+RTFLAGS  += -I$(FSR)/include
 .DEFAULT_GOAL := all
-FSR4_STAMP := $(O)/fsr4_patch_$(FSR4_DRIVER_PATCH).stamp
-$(FSR4_STAMP):
-	@mkdir -p $(O) && rm -f $(O)/fsr4_patch_*.stamp && touch $@
-$(O)/rt/nvn/vulkan/fsr4.o: $(FSR4_STAMP)
-$(O)/rt/nvn/vulkan/fsr4.o: RTFLAGS += -DFSR4_DRIVER_PATCH=$(FSR4_DRIVER_PATCH)
 # NULL_GPU=1: no renderer (runtime/nvn/backend_null.c: the game runs, nothing is drawn)
 ifeq ($(NULL_GPU),1)
 RTFLAGS  += -DMHGU_NULL_BACKEND
@@ -237,6 +233,48 @@ test-settings: $(LIB_STAMPS)
 	@mkdir -p $(O)/settings-test
 	$(CC) $(RTFLAGS) tests/test_settings.c runtime/config.c runtime/config_store.c $(SDL_LIBS) -lm -o $(O)/settings-test/test-settings$(if $(filter windows,$(PLATFORM)),.exe)
 	$(O)/settings-test/test-settings$(if $(filter windows,$(PLATFORM)),.exe) $(O)/settings-test/settings.ini
+
+# Engine modules (docs/ENGINE-MODULES.md). example-engine-module builds the example into the folder layout engine_modules/
+# expects; test-engine-modules builds the loader (runtime/engine_module.c) into a host program and checks it against test
+# modules - one that loads, and the ways one can fail - without the game files.
+ENGMOD_EXT  := $(if $(filter windows,$(PLATFORM)),dll,so)
+ENGMOD_CC   := $(CC) -O2 -Wall -fPIC -shared -fuse-ld=lld
+ENGMOD_TEST := $(O)/engine-module-test
+ENGMOD_SRC  := extras/example-engine-module/example_engine_module.c
+.PHONY: example-engine-module test-engine-modules
+example-engine-module:
+	@mkdir -p $(ENGMOD_TEST)/engine_modules/example
+	$(ENGMOD_CC) $(ENGMOD_SRC) -o $(ENGMOD_TEST)/engine_modules/example/example.$(ENGMOD_EXT)
+	@echo "built $(ENGMOD_TEST)/engine_modules/example: copy the folder to engine_modules/ and add the line 'example' to engine_modules/enabled.txt"
+
+test-engine-modules: $(LIB_STAMPS)
+	@rm -rf $(ENGMOD_TEST)/t && mkdir -p $(ENGMOD_TEST)/t/good $(ENGMOD_TEST)/t/hidden $(ENGMOD_TEST)/t/badapi $(ENGMOD_TEST)/t/noapi $(ENGMOD_TEST)/t/declines $(ENGMOD_TEST)/t/notamodule
+	$(ENGMOD_CC) $(ENGMOD_SRC) -o $(ENGMOD_TEST)/t/good/good.$(ENGMOD_EXT)
+	cp $(ENGMOD_TEST)/t/good/good.$(ENGMOD_EXT) $(ENGMOD_TEST)/t/hidden/hidden.$(ENGMOD_EXT)
+	$(ENGMOD_CC) -DEXAMPLE_API=99 $(ENGMOD_SRC) -o $(ENGMOD_TEST)/t/badapi/badapi.$(ENGMOD_EXT)
+	$(ENGMOD_CC) -DEXAMPLE_NO_API $(ENGMOD_SRC) -o $(ENGMOD_TEST)/t/noapi/noapi.$(ENGMOD_EXT)
+	$(ENGMOD_CC) -DEXAMPLE_DECLINE $(ENGMOD_SRC) -o $(ENGMOD_TEST)/t/declines/declines.$(ENGMOD_EXT)
+	printf 'int unrelated;\n' > $(ENGMOD_TEST)/t/notamodule.c
+	$(ENGMOD_CC) $(ENGMOD_TEST)/t/notamodule.c -o $(ENGMOD_TEST)/t/notamodule/notamodule.$(ENGMOD_EXT)
+	printf '\357\273\277good\n# the loader test\n  badapi  \nnoapi\ndeclines\nnotamodule\nnosuch\n../evil\ngood\n' > $(ENGMOD_TEST)/t/enabled.txt
+	$(CC) $(RTFLAGS) tests/test_engine_module.c runtime/engine_module.c runtime/config.c runtime/config_store.c $(SDL_LIBS) -lm -o $(ENGMOD_TEST)/test-engine-module$(if $(filter windows,$(PLATFORM)),.exe)
+	MHGU_ENGINE_MODULES_DIR=$(ENGMOD_TEST)/t $(ENGMOD_TEST)/test-engine-module$(if $(filter windows,$(PLATFORM)),.exe) > $(ENGMOD_TEST)/t/out.txt 2>&1 || { cat $(ENGMOD_TEST)/t/out.txt; exit 1; }
+	@cat $(ENGMOD_TEST)/t/out.txt
+	@for want in 'good: starting' 'good: loaded (Example' '\[example\] port test-version' 'badapi: built for engine module API 99' \
+	             'noapi: no mhgu_engine_module_api' 'declines: the module declined' 'notamodule: no mhgu_engine_module_api' \
+	             'nosuch: no such folder' '"../evil" is not a folder name' 'engine modules loaded .*: Example' '\[example\] shutdown'; do \
+	    grep -q "$$want" $(ENGMOD_TEST)/t/out.txt || { echo "missing in the log: $$want"; exit 1; }; done
+	@! grep -q 'hidden' $(ENGMOD_TEST)/t/out.txt || { echo "a module enabled.txt does not list was loaded"; exit 1; }
+	@! grep -Eq 'folder .*/(badapi|noapi)' $(ENGMOD_TEST)/t/out.txt || { echo "the entry of a refused module was called"; exit 1; }
+	@test "$$(grep -c 'good: loaded' $(ENGMOD_TEST)/t/out.txt)" = 1 || { echo "good loaded twice"; exit 1; }
+	@echo "test-engine-modules: OK"
+
+# Host-only test of the cheats folder being read again: no game dump or generated code required.
+.PHONY: test-cheats
+test-cheats: $(LIB_STAMPS)
+	@mkdir -p $(O)/settings-test
+	$(CC) $(RTFLAGS) tests/test_cheats.c runtime/cheats.c -lpthread -o $(O)/settings-test/test-cheats$(if $(filter windows,$(PLATFORM)),.exe)
+	cd $(O)/settings-test && ./test-cheats$(if $(filter windows,$(PLATFORM)),.exe)
 
 $(O)/gen/%.o: $(GEN)/%.c runtime/cpu.h runtime/vfp.h runtime/neon_rt.h
 	@mkdir -p $(dir $@)
@@ -258,6 +296,7 @@ $(O)/rt/nvn/vulkan/exec.o: $(O)/shader.id
 $(O)/rt/nvn/vulkan/exec.o: RTFLAGS += -DSHADER_ID='"$(SHADER_ID)"'
 $(O)/version.id: FORCE
 	@mkdir -p $(O); [ "$$(cat $@ 2>/dev/null)" = '$(VERSION)' ] || echo '$(VERSION)' > $@
+$(O)/rt/ui.o: extras/icon/mhgurecomp-128.png
 $(O)/rt/main.o: $(O)/version.id
 $(O)/rt/main.o: RTFLAGS += -DMHGU_VERSION='"$(VERSION)"'
 
@@ -306,6 +345,14 @@ $(O)/updater/%.o: updater/%.c updater/updater.h $(O)/version.id
 	$(CC) -O2 -g -Wall $(OSFLAGS) $(LIB_INC) -DMHGU_VERSION='"$(VERSION)"' -c $< -o $@
 # (SDL3 / shaderc: their headers before anything is compiled, their archives in LDFLAGS / UPD_LDFLAGS)
 $(RT_OBJ) $(UPD_OBJ): $(LIB_STAMPS)
+$(ICON_RES): extras/icon/mhgurecomp.rc extras/icon/mhgurecomp.ico
+	@mkdir -p $(dir $@)
+	$(WINDRES) -I extras/icon -O coff -o $@ $<
+$(UPD_ICON_RES): extras/icon/mhgurecomp-updater.rc extras/icon/mhgurecomp-updater.ico
+	@mkdir -p $(dir $@)
+	$(WINDRES) -I extras/icon -O coff -o $@ $<
+$(O)/updater/updater.o: extras/icon/mhgurecomp-updater-128.png
+UPD_OBJ  += $(UPD_ICON_RES)
 $(UPDATER): $(UPD_OBJ)
 	@mkdir -p $(dir $@)
 	$(CC) -o $@ $^ $(UPD_LDFLAGS)

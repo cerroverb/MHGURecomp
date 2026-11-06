@@ -606,10 +606,13 @@ TexBackend *vk_tex(NvnTexture *t, bool for_render) {
     if (b->pending_rgba) upload_pending(b);
     if (for_render) b->gpu_owned = true;
     else if (!b->gpu_owned) {
+        // (timed for MHGU_VK_STATS only: this runs for every texture of every draw)
+        static int stats = -1;
+        if (stats < 0) stats = getenv("MHGU_VK_STATS") != NULL;
         extern uint64_t stat_upload_ns;
-        uint64_t t0 = plat_now_ns();
+        uint64_t t0 = stats ? plat_now_ns() : 0;
         upload_texture(t, b);
-        stat_upload_ns += plat_now_ns() - t0;
+        if (stats) stat_upload_ns += plat_now_ns() - t0;
     }
     return b;
 }
@@ -834,7 +837,7 @@ VkSampler vk_sampler(NvnSamplerDesc *d) {
         switch (d->wrap[i]) {
         case 0: case 7: modes[i] = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE; break;
         case 1: modes[i] = VK_SAMPLER_ADDRESS_MODE_REPEAT; break;
-        case 2: case 3: modes[i] = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE; break;
+        case 2: case 3: modes[i] = g_vk.no_mirror_clamp ? VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT : VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE; break;
         case 4: case 5: modes[i] = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER; border = true; break;
         case 6: modes[i] = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT; break;
         default: modes[i] = VK_SAMPLER_ADDRESS_MODE_REPEAT;
